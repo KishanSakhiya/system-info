@@ -1,2 +1,12 @@
-# system-info
-Get the system info, like serial_number, uuid, manufacturer, and model for all type of OS.
+# systeminfo
+Cross-platform Go module to retrieve Serial Number, UUID, Manufacturer, and Model.
+
+## Usage
+```go
+import "github.com/KishanSakhiya/system-info"
+
+func main() {
+    info, _ := systeminfo.Get()
+    println(info.SerialNumber)
+}
+```
