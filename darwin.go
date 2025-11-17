@@ -3,29 +3,59 @@
 package systeminfo
 
 import (
+	"errors"
 	"os/exec"
 	"strings"
 )
 
-func parse(lines []string, key string) string {
-	for _, l := range lines {
-		if strings.HasPrefix(l, key) {
-			parts := strings.SplitN(l, ":", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
+func getInfoDarwin() (Info, error) {
+	var info Info
+	if out, err := exec.Command("system_profiler", "SPHardwareDataType").CombinedOutput(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "Serial Number") {
+				if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
+					info.SerialNumber = strings.TrimSpace(parts[1])
+				}
+			}
+			if strings.HasPrefix(line, "Hardware UUID") {
+				if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
+					info.UUID = strings.TrimSpace(parts[1])
+				}
+			}
+			if strings.HasPrefix(line, "Model Name") {
+				if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
+					info.Model = strings.TrimSpace(parts[1])
+				}
+			}
+			if strings.HasPrefix(line, "Model Identifier") && info.Model == "" {
+				if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
+					info.Model = strings.TrimSpace(parts[1])
+				}
+			}
+		}
+		if hasMeaningful(info) {
+			return info, nil
+		}
+	}
+	// fallback ioreg
+	if out, err := exec.Command("ioreg", "-c", "IOPlatformExpertDevice", "-r", "-d", "1").CombinedOutput(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, "IOPlatformSerialNumber") {
+				if parts := strings.Split(line, "="); len(parts) >= 2 {
+					info.SerialNumber = strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+				}
+			}
+			if strings.Contains(line, "IOPlatformUUID") {
+				if parts := strings.Split(line, "="); len(parts) >= 2 {
+					info.UUID = strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+				}
 			}
 		}
 	}
-	return ""
-}
-
-func Get() (Info, error) {
-	out, _ := exec.Command("system_profiler", "SPHardwareDataType").Output()
-	lines := strings.Split(string(out), "")
-	return Info{
-		SerialNumber: parse(lines, "Serial Number"),
-		UUID:         parse(lines, "Hardware UUID"),
-		Manufacturer: "Apple",
-		Model:        parse(lines, "Model Name"),
-	}, nil
+	if hasMeaningful(info) {
+		return info, nil
+	}
+	return Info{}, errors.New("could not determine system info on darwin")
 }
